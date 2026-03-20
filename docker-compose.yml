@@ -1,0 +1,75 @@
+version: '3'
+services:
+  metastore-db:
+    image: postgres:10
+    container_name: metastore-db
+    environment:
+      - POSTGRES_DB=metastore
+      - POSTGRES_USER=hive
+      - POSTGRES_PASSWORD=hive
+    volumes:
+      - metastore_db_data:/var/lib/postgresql/data
+
+  # 2. Hadoop NameNode (The Brain)
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=test
+      - ENSURE_NAMENODE_DIR=/hadoop/dfs/name
+    ports:
+      - "9870:9870"
+      - "8020:8020"
+
+  # 3. Hadoop DataNode (The Muscle)
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+    environment:
+      - SERVICE_PRECONDITION=namenode:9870
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+    depends_on:
+      - namenode
+
+  # 4. Hive Server (The SQL Engine)
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-server
+    ports:
+      - "10000:10000"
+    environment:
+      - SERVICE_PRECONDITION=namenode:9870 datanode:9864 metastore-db:5432
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+      - HIVE_SITE_CONF_javax_jdo_option_ConnectionURL=jdbc:postgresql://metastore-db:5432/metastore
+      - HIVE_SITE_CONF_javax_jdo_option_ConnectionDriverName=org.postgresql.Driver
+      - HIVE_SITE_CONF_javax_jdo_option_ConnectionUserName=hive
+      - HIVE_SITE_CONF_javax_jdo_option_ConnectionPassword=hive
+    depends_on:
+      - namenode
+      - metastore-db
+
+  # 5. NiFi (The Ingestor)
+  nifi:
+    image: apache/nifi:1.25.0
+    container_name: nifi
+    ports:
+      - "8443:8443"
+    environment:
+      - NIFI_WEB_HTTPS_PORT=8443
+      - NIFI_WEB_HTTPS_HOST=0.0.0.0
+      - SINGLE_USER_CREDENTIALS_USERNAME=admin
+      - SINGLE_USER_CREDENTIALS_PASSWORD=cloudera_project_2026_password
+    volumes:
+      - ./nifi_data:/opt/nifi/nifi-current/conf
+      - ./hadoop_conf:/etc/hadoop/conf
+    depends_on:
+      - namenode
+
+volumes:
+  hadoop_namenode:
+  hadoop_datanode:
+  metastore_db_data:

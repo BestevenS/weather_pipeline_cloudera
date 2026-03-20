@@ -1,0 +1,9 @@
+.vscode
+.env
+
+hadoop_conf
+nifi_data
+
+*.csv
+*.log
+.DS_Store
